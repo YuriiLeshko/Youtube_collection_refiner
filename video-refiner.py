@@ -8,7 +8,7 @@ from typing import List, Optional
 import yt_dlp
 import openpyxl
 from openpyxl.styles import Alignment, PatternFill
-from mo ad viepy.video.io.VideoFileClip import VideoFileClip
+from moviepy.video.io.VideoFileClip import VideoFileClip
 
 
 VIDEO_EXTENSIONS = [".mp4", ".mkv", ".avi", ".mov", ".flv"]
