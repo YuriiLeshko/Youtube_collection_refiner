@@ -1,9 +1,12 @@
 import os
+import sys
 import tempfile
 import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import subprocess
 from typing import List, Optional
+from functools import wraps
+import argparse
 
 import yt_dlp
 import openpyxl
@@ -21,25 +24,86 @@ STATUS_COLORS = {
 }
 
 
-def retry(max_retries=3):
+class Config:
     """
-        Retry decorator to attempt a function multiple times upon failure.
-        :param max_retries: Maximum number of retries allowed.
+        Configuration class to store global settings and objects.
     """
-    def decorator(func):
-        def wrapper(*args, **kwargs):
-            last_exception = None
-            for attempt in range(max_retries):
-                try:
-                    result = func(*args, **kwargs)
-                    if result is not None:
-                        return result
-                except Exception as e:
-                    last_exception = e
-                    print(f"{func.__name__} failed on attempt {attempt + 1}: {e}")
-            raise last_exception
-        return wrapper
-    return decorator
+    recursive: bool = True
+    threads: int = 3
+    retries: int = 3
+
+
+def retry(func):
+    """
+        Retry decorator to attempt a function multiple times upon failure,
+        uses the retry count from a global configuration.
+    """
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        last_exception = None
+        for attempt in range(Config.retries):
+            try:
+                result = func(*args, **kwargs)
+                if result is not None:
+                    return result
+            except Exception as e:
+                last_exception = e
+                print(f"{func.__name__} failed on attempt {attempt + 1}: {e}")
+        raise last_exception
+    return wrapper
+
+
+def parse_arguments():
+    """
+        Parse command-line arguments.
+        :return: Parsed arguments object.
+    """
+    parser = argparse.ArgumentParser(
+        description="Script to update video YouTube quality in local library and sort by channel folders."
+    )
+    parser.add_argument(
+        'target_dir',
+        type=str,
+        help="Target directory where processed files will be saved."
+    )
+    parser.add_argument(
+        '--source_dir',
+        type=str,
+        default=os.getcwd(),
+        help="Source directory containing videos to process (default: current working directory)."
+    )
+    parser.add_argument(
+        '--recursive',
+        action='store_true',
+        help="Enable recursive search in the source directory."
+    )
+    parser.add_argument(
+        '--threads',
+        type=int,
+        default=3,
+        help="Number of concurrent threads (default: 3)."
+    )
+    parser.add_argument(
+        '--retries',
+        type=int,
+        default=3,
+        help="Number of retries for downloading files (default: 3)."
+    )
+    return parser.parse_args()
+
+
+def ensure_latest_package(package_name):
+    """
+        Ensure that the specified package is updated to the latest version using pip.
+        :param package_name: Name of the package to be updated.
+        :raises SystemExit: If the pip update command fails.
+    """
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", package_name])
+        print(f"{package_name} successfully updated to the latest version.")
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to update {package_name}: {e}")
+        sys.exit(1)
 
 
 def initialize_excel(dir_path: str) -> str:
@@ -114,24 +178,29 @@ def is_video_file(file_path: str) -> bool:
     return os.path.splitext(file_path)[1].lower() in VIDEO_EXTENSIONS
 
 
-def safe_move(source_path: str, channel_folder: str, file_name: str):
+def get_video_files(source_dir: str, recursive: bool = True) -> list[str]:
     """
-        Safely move a file to the target directory, ensuring no overwrites.
-        :param source_path: Source file path.
-        :param channel_folder: Target folder for the file.
-        :param file_name: Name of the file.
+        Get a list of video files from the source directory.
+        :param source_dir: Directory containing video files.
+        :param recursive: Whether to search recursively in subdirectories.
+        :return: List of video file paths.
     """
-    dest_path = os.path.join(channel_folder, file_name)
-    counter = 1
-    while os.path.exists(dest_path):
-        base, ext = os.path.splitext(dest_path)
-        dest_path = f"{base}_[{counter}]{ext}"
-        counter += 1
+    if recursive:
+        video_files = [
+            os.path.join(root, file)
+            for root, _, files in os.walk(source_dir)
+            for file in files if is_video_file(file)
+        ]
+    else:
+        video_files = [
+            os.path.join(source_dir, f)
+            for f in os.listdir(source_dir)
+            if os.path.isfile(os.path.join(source_dir, f)) and is_video_file(f)
+        ]
+    return video_files
 
-    shutil.move(source_path, dest_path)
 
-
-@retry(max_retries=3)
+@retry
 def search_youtube_video(video_name: str, log: List[str]) -> Optional[dict]:
     """
        Search for a YouTube video by name.
@@ -152,7 +221,7 @@ def search_youtube_video(video_name: str, log: List[str]) -> Optional[dict]:
             raise Exception("No results found")
 
 
-@retry(max_retries=3)
+@retry
 def download_youtube_video(video_url: str, output_dir: str, format_id: str, log: List[str]) -> Optional[str]:
     """
         Download a specific format of a YouTube video.
@@ -179,7 +248,7 @@ def download_youtube_video(video_url: str, output_dir: str, format_id: str, log:
         return None
 
 
-@retry(max_retries=3)
+@retry
 def merge_video_audio(video_path: str, audio_path: str, merged_path: str, log: List[str]) -> Optional[str]:
     """
         Merge video and audio into a single file.
@@ -250,7 +319,7 @@ def video_already_exists(video_name: str, channel_folder: str, log: List[str]) -
     return False
 
 
-@retry(max_retries=3)
+@retry
 def handle_local_resolution(file_path: str, log: List[str]) -> bool:
     """
         Check the resolution of a local video file.
@@ -288,6 +357,23 @@ def extract_required_formats(formats: List[dict], log: List[str]) -> dict:
             required_formats[fmt['format_id']] = fmt
     log.append(f"Available formats: {', '.join([f for f in required_formats if required_formats[f]])}")
     return required_formats
+
+
+def safe_move(source_path: str, channel_folder: str, file_name: str):
+    """
+        Safely move a file to the target directory, ensuring no overwrites.
+        :param source_path: Source file path.
+        :param channel_folder: Target folder for the file.
+        :param file_name: Name of the file.
+    """
+    dest_path = os.path.join(channel_folder, file_name)
+    counter = 1
+    while os.path.exists(dest_path):
+        base, ext = os.path.splitext(dest_path)
+        dest_path = f"{base}_[{counter}]{ext}"
+        counter += 1
+
+    shutil.move(source_path, dest_path)
 
 
 def process_video_task(excel_path, workbook, sheet, file_path, target_dir):
@@ -379,11 +465,7 @@ def process_videos(source_dir: str, target_dir: str, max_threads: int = 3):
     workbook = openpyxl.load_workbook(excel_path)
     sheet = workbook.active
 
-    video_files = [
-        os.path.join(root, file)
-        for root, _, files in os.walk(source_dir)
-        for file in files if is_video_file(file)
-    ]
+    video_files = get_video_files(source_dir, Config.recursive)
 
     print(f"Found {len(video_files)} videos for processing.")
 
@@ -407,6 +489,14 @@ def process_videos(source_dir: str, target_dir: str, max_threads: int = 3):
 
 
 if __name__ == '__main__':
-    source_directory = '/run/media/ly/2A1F50327A5E76A2/Video/Alternative energy/Аксіальний генератор 1'
-    target_directory = '/run/media/ly/2A1F50327A5E76A2/Video/Alternative energy/Sorted'
-    process_videos(source_directory, target_directory)
+    ensure_latest_package("yt-dlp")
+    ensure_latest_package("ffmpeg")
+
+    params = parse_arguments()
+    Config.recursive = params.recursive
+    Config.threads = params.threads
+    Config.retries = params.retries
+    source_directory = params.source_dir
+    target_directory = params.target_dir
+
+    process_videos(source_directory, target_directory, max_threads=Config.threads)
