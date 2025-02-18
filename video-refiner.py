@@ -262,7 +262,7 @@ def merge_video_audio(video_path: str, audio_path: str, merged_path: str, log: L
         log.append("Starting merge of video and audio...")
         command = [
             "ffmpeg", "-i", video_path, "-i", audio_path,
-            "-c:v", "copy", "-c:a", "aac", merged_path
+            "-c:v", "copy", "-c:a", "aac", merged_path,
         ]
         result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
