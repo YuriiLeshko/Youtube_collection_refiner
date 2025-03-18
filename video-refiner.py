@@ -6,6 +6,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import subprocess
 from typing import List, Optional
 from functools import wraps
+import logging
+from logging.handlers import BufferingHandler
+from contextlib import redirect_stdout, redirect_stderr
 import argparse
 
 import yt_dlp
@@ -32,6 +35,14 @@ class Config:
     threads: int = 3
     retries: int = 3
 
+    excel_path = None
+    workbook = None
+    sheet = None
+
+
+global_logger = logging.getLogger("global_logger")
+global_logger.setLevel(logging.INFO)
+global_logger.addHandler(logging.StreamHandler())
 
 def retry(func):
     """
@@ -48,7 +59,7 @@ def retry(func):
                     return result
             except Exception as e:
                 last_exception = e
-                print(f"{func.__name__} failed on attempt {attempt + 1}: {e}")
+                global_logger.warning(f"{func.__name__} failed on attempt {attempt + 1}: {e}")
         raise last_exception
     return wrapper
 
@@ -100,17 +111,16 @@ def ensure_latest_package(package_name):
     """
     try:
         subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", package_name])
-        print(f"{package_name} successfully updated to the latest version.")
+        global_logger.info(f"{package_name} successfully updated to the latest version.")
     except subprocess.CalledProcessError as e:
-        print(f"Failed to update {package_name}: {e}")
+        global_logger.warning(f"Failed to update {package_name}: {e}")
         sys.exit(1)
 
 
-def initialize_excel(dir_path: str) -> str:
+def initialize_excel(dir_path: str):
     """
         Initialize an Excel workbook to log video processing statuses.
         :param dir_path: Directory where the Excel file will be saved.
-        :return: Path to the created Excel file.
     """
     workbook = openpyxl.Workbook()
     sheet = workbook.active
@@ -119,27 +129,42 @@ def initialize_excel(dir_path: str) -> str:
 
     excel_path = os.path.join(dir_path, "processing_status.xlsx")
     workbook.save(excel_path)
-    return excel_path
+
+    Config.excel_path = excel_path
+    Config.workbook = workbook
+    Config.sheet = sheet
 
 
-def write_log_and_status(excel_path, workbook, sheet, video_name, channel_name, link, status, log):
+def get_buffered_logs(logger_name: str) -> list:
+    logger = logging.getLogger(logger_name)
+    logs = []
+    for handler in logger.handlers:
+        if isinstance(handler, BufferingHandler):
+            formatted_logs = [handler.format(record) for record in handler.buffer]
+            logs.extend(formatted_logs)
+    return logs
+
+
+def write_log_and_status(video_name, channel_name, link, status):
     """
         Write a log and status entry into the Excel file.
-        :param excel_path: Path to the Excel file.
-        :param workbook: OpenPyXL workbook object.
-        :param sheet: OpenPyXL worksheet object.
         :param video_name: Name of the video.
         :param channel_name: Name of the channel.
         :param link: Link to the video.
         :param status: Processing status (Downloaded, Moved, Skipped, Error).
-        :param log: List of log messages.
     """
+    excel_path = Config.excel_path
+    workbook = Config.workbook
+    sheet = Config.sheet
+
+    buffered_logs = get_buffered_logs(f"{video_name}")
+
     row = [
         video_name,
         channel_name,
         link,
         status,
-        "\n".join(log)
+        "\n".join(buffered_logs)
     ]
     sheet.append(row)
     status_cell = sheet.cell(row=sheet.max_row, column=4)
@@ -149,24 +174,35 @@ def write_log_and_status(excel_path, workbook, sheet, video_name, channel_name, 
     workbook.save(excel_path)
 
 
-def adjust_column_width_and_row_height(sheet):
+def format_excel_sheet():
     """
-        Adjust the column width and row height for better readability.
-        :param sheet: OpenPyXL worksheet object.
+    Adjust the Excel worksheet formatting by setting column widths, enabling text wrapping for logs,
+    and ensuring text visibility without dynamic row height adjustment.
     """
+    sheet = Config.sheet
     columns_to_adjust = {'A': 30, 'B': 25, 'D': 15}
 
-    for col_letter in columns_to_adjust.keys():
+    for col_letter, min_width in columns_to_adjust.items():
         max_length = 0
         for cell in sheet[col_letter]:
             if cell.value:
                 max_length = max(max_length, len(str(cell.value)))
-        sheet.column_dimensions[col_letter].width = max(max_length + 2, columns_to_adjust[col_letter])
+        sheet.column_dimensions[col_letter].width = max(max_length + 5, min_width)
 
+    # Set wrap_text=True for all cells in column "Log"
+    log_col_letter = 'E'
+    for cell in sheet[log_col_letter]:
+        cell.alignment = Alignment(wrap_text=True)
+    sheet.column_dimensions[log_col_letter].width = 60
+
+    # Set consistent row height
     for row in sheet.iter_rows():
-        for cell in row:
-            cell.alignment = Alignment(horizontal='left', vertical='center', wrap_text=False)
         sheet.row_dimensions[row[0].row].height = 15
+        for cell in row:
+            if cell.column_letter != log_col_letter:
+                cell.alignment = Alignment(horizontal='left', vertical='center', wrap_text=False)
+
+    Config.workbook.save(Config.excel_path)
 
 
 def is_video_file(file_path: str) -> bool:
@@ -201,65 +237,57 @@ def get_video_files(source_dir: str, recursive: bool = True) -> list[str]:
 
 
 @retry
-def search_youtube_video(video_name: str, log: List[str]) -> Optional[dict]:
+def search_youtube_video(video_name: str) -> Optional[dict]:
     """
        Search for a YouTube video by name.
        :param video_name: Name of the video to search for.
-       :param log: List of log messages.
        :return: Dictionary containing video information, or None if not found.
     """
+    local_logger = logging.getLogger(f"{video_name}")
+
     search_query = f"ytsearch:{video_name}"
-    log.append(f"Searching for: {search_query}")
+    local_logger.info(f"Searching video...")
     with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
         results = ydl.extract_info(search_query, download=False).get('entries', [])
         if results:
             result = results[0]
-            log.append(f"Found video: {result['webpage_url']} from channel: {result['uploader']}")
+            local_logger.info(f"Found video from channel: {result['uploader']}")
             return result
         else:
-            log.append("No results found")
+            local_logger.warning("No results found")
             raise Exception("No results found")
 
 
 @retry
-def download_youtube_video(video_url: str, output_dir: str, format_id: str, log: List[str]) -> Optional[str]:
-    """
-        Download a specific format of a YouTube video.
-        :param video_url: URL of the video.
-        :param output_dir: Directory where the video will be saved.
-        :param format_id: Format ID to download.
-        :param log: List of log messages.
-        :return: Path to the downloaded file, or None if failed.
-    """
+def download_youtube_video(video_name: str, video_url: str, output_dir: str, format_id: str) -> Optional[str]:
+    local_logger = logging.getLogger(f"{video_name}")
     try:
-        log.append(f"Downloading format {format_id}...")
+        local_logger.info(f"Downloading format {format_id}...")
         ydl_opts = {
             'format': format_id,
             'outtmpl': os.path.join(output_dir, '%(title)s.%(ext)s'),
-            'quiet': True,
+            'quiet': True
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info_dict = ydl.extract_info(video_url, download=True)
             file_path = ydl.prepare_filename(info_dict)
-            log.append(f"Format {format_id} downloaded successfully: {file_path}")
+            local_logger.info(f"Format {format_id} downloaded successfully.")
             return file_path
     except Exception as e:
-        log.append(f"Error downloading format {format_id}: {e}")
+        local_logger.warning(f"Error downloading format {format_id}: {e}")
         return None
-
-
 @retry
-def merge_video_audio(video_path: str, audio_path: str, merged_path: str, log: List[str]) -> Optional[str]:
+def merge_video_audio(video_name, video_path: str, audio_path: str, merged_path: str) -> Optional[str]:
     """
         Merge video and audio into a single file.
         :param video_path: Path to the video file.
         :param audio_path: Path to the audio file.
         :param merged_path: Path to save the merged file.
-        :param log: List of log messages.
         :return: Path to the merged file, or None if failed.
     """
+    local_logger = logging.getLogger(f"{video_name}")
     try:
-        log.append("Starting merge of video and audio...")
+        local_logger.info("Starting merge of video and audio...")
         command = [
             "ffmpeg", "-i", video_path, "-i", audio_path,
             "-c:v", "copy", "-c:a", "aac", merged_path,
@@ -267,84 +295,85 @@ def merge_video_audio(video_path: str, audio_path: str, merged_path: str, log: L
         result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         if result.returncode != 0:
-            log.append(f"FFmpeg error: {result.stderr.decode()}")
+            local_logger.warning(f"FFmpeg error: {result.stderr.decode()}")
             return None
 
-        log.append(f"Merged video saved to {merged_path}")
+        local_logger.info(f"Merged video saved to target directory")
         return merged_path
     except Exception as e:
-        log.append(f"Error during merging: {e}")
+        local_logger.warning(f"Error during merging: {e}")
         return None
 
 
-def download_and_merge_video_audio(video_url, output_path, original_name, log: List[str]) -> Optional[str]:
+def download_and_merge_video_audio(video_name, video_url, output_path, original_name) -> Optional[str]:
     """
         Download and merge video and audio from a YouTube video into a single file.
         :param video_url: URL of the YouTube video.
         :param output_path: Directory where the final merged file will be saved.
         :param original_name: Original name for the output file.
-        :param log: List to store log messages for the process.
         :return: Path to the merged video file, or None if the process fails.
     """
+    local_logger = logging.getLogger(f"{video_name}")
     try:
         with tempfile.TemporaryDirectory() as temp_dir:
-            temp_video_path = download_youtube_video(video_url, temp_dir, '136', log)
-            temp_audio_path = download_youtube_video(video_url, temp_dir, '140', log)
+            temp_video_path = download_youtube_video(video_name, video_url, temp_dir, '136')
+            temp_audio_path = download_youtube_video(video_name, video_url, temp_dir, '140')
             merged_path = os.path.join(output_path, f"{original_name}.mp4")
 
-            merged_result = merge_video_audio(temp_video_path, temp_audio_path, merged_path, log)
+            merged_result = merge_video_audio(video_name, temp_video_path, temp_audio_path, merged_path)
             if not merged_result:
-                log.append("Failed to merge video and audio.")
+                local_logger.warning("Failed to merge video and audio.")
                 return None
 
-            log.append("Video/audio merged and saved successfully")
+            local_logger.info("Video/audio merged and saved successfully")
             return merged_result
 
     except Exception as e:
-        log.append(f"Error in download and merge process: {e}")
+        local_logger.warning(f"Error in download and merge process: {e}")
         return None
 
 
-def video_already_exists(video_name: str, channel_folder: str, log: List[str]) -> bool:
+def video_already_exists(video_name: str, channel_folder: str) -> bool:
     """
         Check if a video with the given name already exists in the specified folder.
         :param video_name: Name of the video to check.
         :param channel_folder: Path to the folder where the video might exist.
-        :param log: List to store log messages.
         :return: True if the video exists, False otherwise.
     """
+    local_logger = logging.getLogger(f"{video_name}")
     if any(os.path.splitext(f)[0] == video_name for f in os.listdir(channel_folder)):
-        log.append(f"Video '{video_name}' already exists in target folder. Skipping.")
+        local_logger.info(f"Video already exists in target folder. Skipping.")
         return True
     return False
 
 
 @retry
-def handle_local_resolution(file_path: str, log: List[str]) -> bool:
+def handle_local_resolution(file_path: str) -> bool:
     """
         Check the resolution of a local video file.
         :param file_path: Path to the video file.
-        :param log: List to store log messages.
         :return: True if the resolution is 720p or higher, False otherwise.
     """
+    file_name = os.path.basename(file_path)
+    video_name = os.path.splitext(file_name)[0]
+    local_logger = logging.getLogger(f"{video_name}")
     try:
         with VideoFileClip(file_path) as video:
             local_resolution = video.size[1]  # Video height
-        log.append(f"Local resolution is {local_resolution}.")
+        local_logger.info(f"Local resolution is {local_resolution}.")
         if local_resolution and local_resolution >= 720:
-            log.append(f"Local resolution is >= 720p. Moving to target folder.")
+            local_logger.info(f"Local resolution is >= 720p. Moving to target folder.")
             return True
         return False
     except Exception as e:
-        log.append(f"Error processing video resolution: {e}")
+        local_logger.warning(f"Error processing video resolution: {e}")
         return False
 
 
-def extract_required_formats(formats: List[dict], log: List[str]) -> dict:
+def extract_required_formats(formats: List[dict]) -> dict:
     """
         Extract required formats (22, 136, 140) from the list of available formats.
         :param formats: List of available formats from the YouTube video info.
-        :param log: List to store log messages.
         :return: Dictionary with required format IDs as keys and format info as values.
     """
     required_formats = {
@@ -355,7 +384,7 @@ def extract_required_formats(formats: List[dict], log: List[str]) -> dict:
     for fmt in formats:
         if fmt['format_id'] in required_formats:
             required_formats[fmt['format_id']] = fmt
-    log.append(f"Available formats: {', '.join([f for f in required_formats if required_formats[f]])}")
+
     return required_formats
 
 
@@ -376,82 +405,77 @@ def safe_move(source_path: str, channel_folder: str, file_name: str):
     shutil.move(source_path, dest_path)
 
 
-def process_video_task(excel_path, workbook, sheet, file_path, target_dir):
+def process_video_task(file_path, target_dir):
     """
        Process a single video file: check resolution, search for YouTube data, and perform appropriate actions.
-       :param excel_path: Path to the Excel file for logging.
-       :param workbook: OpenPyXL workbook object.
-       :param sheet: OpenPyXL worksheet object.
        :param file_path: Path to the video file being processed.
        :param target_dir: Directory where processed files will be stored.
     """
     file_name = os.path.basename(file_path)
     video_name = os.path.splitext(file_name)[0]
-    log = [f"Processing video: {video_name}"]
-    print(log[-1])
+    global_logger.info(f"Processing video: {video_name}")
 
-    try:
-        result = search_youtube_video(video_name, log)
-        if not result:
-            write_log_and_status(excel_path, workbook, sheet,
-                                 video_name, "N/A", "N/A", "Error", log)
-            return
+    # Logger search is based on his unique name that matches the name of the video
+    local_logger = logging.getLogger(f"{video_name}")
+    local_logger.setLevel(logging.INFO)
+    buffer_handler = BufferingHandler(32)
+    local_logger.addHandler(buffer_handler)
 
-        channel_name = result.get('uploader', 'Unknown Channel')
-        youtube_video_url = result.get('webpage_url', 'Unknown URL')
-        channel_folder = os.path.join(target_dir, channel_name)
-        os.makedirs(channel_folder, exist_ok=True)
+    with open(os.devnull, 'w') as o_null, redirect_stdout(o_null), redirect_stderr(o_null):
+        try:
+            result = search_youtube_video(video_name)
+            if not result:
+                write_log_and_status(video_name, "N/A", "N/A", "Error")
+                return
 
-        if video_already_exists(video_name, channel_folder, log):
-            os.remove(file_path)
-            log.append(f"Old file '{file_path}' deleted successfully.")
-            write_log_and_status(excel_path, workbook, sheet,
-                                 video_name, channel_name, youtube_video_url, "Skipped", log)
-            return
+            channel_name = result.get('uploader', 'Unknown Channel')
+            youtube_video_url = result.get('webpage_url', 'Unknown URL')
+            channel_folder = os.path.join(target_dir, channel_name)
+            os.makedirs(channel_folder, exist_ok=True)
 
-        if handle_local_resolution(file_path, log):
-            safe_move(file_path, channel_folder, file_name)
-            write_log_and_status(excel_path, workbook, sheet,
-                                 video_name, channel_name, youtube_video_url, "Moved", log)
-            return
-
-        formats = extract_required_formats(result['formats'], log)
-
-        if formats["22"]:
-            log.append("Format 22 found. Downloading directly...")
-            success = download_youtube_video(youtube_video_url, channel_folder, '22', log)
-            if success:
+            if video_already_exists(video_name, channel_folder):
                 os.remove(file_path)
-                log.append(f"Old file '{file_path}' deleted successfully.")
-                write_log_and_status(excel_path, workbook, sheet,
-                                     video_name, channel_name, youtube_video_url, "Downloaded", log)
-            else:
-                write_log_and_status(excel_path, workbook, sheet,
-                                     video_name, channel_name, youtube_video_url, "Error", log)
-            return
+                local_logger.info(f"Old file deleted successfully.")
+                write_log_and_status(video_name, channel_name, youtube_video_url, "Skipped")
+                return
 
-        if formats["136"] and formats["140"]:
-            log.append("Merging formats 136 and 140...")
-            merged_path = download_and_merge_video_audio(youtube_video_url, channel_folder, video_name, log)
-            if merged_path:
-                os.remove(file_path)
-                log.append(f"Old file '{file_path}' deleted successfully.")
-                write_log_and_status(excel_path, workbook, sheet,
-                                     video_name, channel_name, youtube_video_url, "Downloaded", log)
-            else:
-                write_log_and_status(excel_path, workbook, sheet,
-                                     video_name, channel_name, youtube_video_url, "Error", log)
-        else:
-            log.append("Neither format 22 nor formats 136 and 140 are available. Moving existing file.")
-            safe_move(file_path, channel_folder, file_name)
-            log.append(f"File '{file_path}' moved to '{channel_folder}'.")
-            write_log_and_status(excel_path, workbook, sheet,
-                                 video_name, channel_name, youtube_video_url, "Moved", log)
+            if handle_local_resolution(file_path):
+                safe_move(file_path, channel_folder, file_name)
+                write_log_and_status(video_name, channel_name, youtube_video_url, "Moved")
+                return
 
-    except Exception as e:
-        log.append(f"Error processing video {video_name}: {e}")
-        write_log_and_status(excel_path, workbook, sheet,
-                             video_name, "N/A", "N/A", "Error", log)
+            formats = extract_required_formats(result['formats'])
+            local_logger.info(f"Available formats: {', '.join(formats)}")
+
+            if formats["22"]:
+                local_logger.info("Format 22 found. Downloading directly...")
+                success = download_youtube_video(video_name, youtube_video_url, channel_folder, '22')
+                if success:
+                    os.remove(file_path)
+                    local_logger.info(f"Old file deleted successfully.")
+                    write_log_and_status(video_name, channel_name, youtube_video_url, "Downloaded")
+                else:
+                    write_log_and_status(video_name, channel_name, youtube_video_url, "Error")
+                return
+
+            if formats["136"] and formats["140"]:
+                local_logger.info("Merging formats 136 and 140...")
+                merged_path = download_and_merge_video_audio(video_name, youtube_video_url, channel_folder, video_name)
+                if merged_path:
+                    os.remove(file_path)
+                    local_logger.info(f"Old file deleted successfully.")
+                    write_log_and_status(video_name, channel_name, youtube_video_url, "Downloaded")
+                else:
+                    write_log_and_status(video_name, channel_name, youtube_video_url, "Error")
+            else:
+                local_logger.warning("Neither format 22 nor formats 136 and 140 are available. Moving existing file.")
+                safe_move(file_path, channel_folder, file_name)
+                local_logger.info(f"File moved to target folder.")
+                write_log_and_status(video_name, channel_name, youtube_video_url, "Moved")
+
+        except Exception as e:
+            local_logger.warning(f"Error processing video {video_name}: {e}")
+            write_log_and_status(video_name, "N/A", "N/A", "Error")
 
 
 def process_videos(source_dir: str, target_dir: str, max_threads: int = 3):
@@ -461,17 +485,14 @@ def process_videos(source_dir: str, target_dir: str, max_threads: int = 3):
         :param target_dir: Directory where processed files will be stored.
         :param max_threads: Maximum number of threads for concurrent processing.
     """
-    excel_path = initialize_excel(source_dir)
-    workbook = openpyxl.load_workbook(excel_path)
-    sheet = workbook.active
 
     video_files = get_video_files(source_dir, Config.recursive)
 
-    print(f"Found {len(video_files)} videos for processing.")
+    global_logger.info(f"Found {len(video_files)} videos for processing.")
 
     with ThreadPoolExecutor(max_threads) as executor:
         futures = {
-            executor.submit(process_video_task, excel_path, workbook, sheet, file_path, target_dir):
+            executor.submit(process_video_task, file_path, target_dir):
                 file_path for file_path in video_files
         }
 
@@ -479,13 +500,9 @@ def process_videos(source_dir: str, target_dir: str, max_threads: int = 3):
             video_path = futures[future]
             try:
                 future.result()
-                print(f"Processing completed for: {video_path}")
+                global_logger.info(f"Processing completed for: {video_path}")
             except Exception as e:
-                print(f"Error processing {video_path}: {e}")
-
-    adjust_column_width_and_row_height(sheet)
-    workbook.save(excel_path)
-    print(f"\nProcessing completed. \nReport saved at {excel_path}")
+                global_logger.warning(f"Error processing {video_path}: {e}")
 
 
 if __name__ == '__main__':
@@ -493,10 +510,16 @@ if __name__ == '__main__':
     ensure_latest_package("ffmpeg")
 
     params = parse_arguments()
-    Config.recursive = params.recursive
-    Config.threads = params.threads
-    Config.retries = params.retries
+
     source_directory = params.source_dir
     target_directory = params.target_dir
 
+    Config.recursive = params.recursive
+    Config.threads = params.threads
+    Config.retries = params.retries
+
+    initialize_excel(source_directory)
     process_videos(source_directory, target_directory, max_threads=Config.threads)
+
+    format_excel_sheet()
+    global_logger.info(f"\nProcessing completed. \nReport saved at {Config.excel_path}")
