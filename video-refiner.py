@@ -27,6 +27,10 @@ class Config:
     """
         Configuration class to store global settings and objects.
     """
+    mode: str = "inplace"
+    source_directory: Optional[os.PathLike[str]] = None
+    target_directory: Optional[os.PathLike[str]] = None
+
     recursive: bool = True
     threads: int = 3
     retries: int = 3
@@ -57,7 +61,7 @@ class VideoStatus(Enum):
 
 @dataclass
 class Video:
-    local_path: str
+    local_path:  os.PathLike[str]
     name: str
     status: VideoStatus = VideoStatus.UNPROCESSED
     yt_id: str = 'N/A'
@@ -102,9 +106,19 @@ def parse_arguments():
         description="Script to update video YouTube quality in local library and sort by channel folders."
     )
     parser.add_argument(
-        'target_dir',
+        '--mode',
         type=str,
-        help="Target directory where processed files will be saved."
+        choices=['inplace', 'by-channel'],
+        default='inplace',
+        help="Choose how to store the processed video: 'inplace' to replace files in the same folder,"
+             " 'by-channel' to create channel subfolders (default: 'inplace')."
+    )
+    parser.add_argument(
+        '--target_dir',
+        type=str,
+        default=None,
+        help="Target directory where processed files will be saved if mode=by-channel. "
+             "Not used if mode=inplace."
     )
     parser.add_argument(
         '--source_dir',
@@ -146,17 +160,16 @@ def ensure_latest_package(package_name):
         sys.exit(1)
 
 
-def initialize_excel(dir_path: str):
+def initialize_excel():
     """
         Initialize an Excel workbook to log video processing statuses.
-        :param dir_path: Directory where the Excel file will be saved.
     """
     workbook = openpyxl.Workbook()
     sheet = workbook.active
     sheet.title = "Processing Status"
     sheet.append(EXCEL_HEADERS)
 
-    excel_path = os.path.join(dir_path, "processing_status.xlsx")
+    excel_path = os.path.join(Config.source_directory, "processing_status.xlsx")
     workbook.save(excel_path)
 
     Config.excel_path = excel_path
@@ -225,10 +238,10 @@ def is_video_file(file_path: str) -> bool:
         :param file_path: Path to the file.
         :return: True if the file is a video, False otherwise.
     """
-    return os.path.splitext(file_path)[1].lower() in VIDEO_EXTENSIONS
+    return os.path.isfile(file_path) and os.path.splitext(file_path)[1].lower() in VIDEO_EXTENSIONS
 
 
-def get_video_files(source_dir: str, recursive: bool = True) -> list[str]:
+def get_video_files(source_dir: os.PathLike[str], recursive: bool = True) -> list[str]:
     """
         Get a list of video files from the source directory.
         :param source_dir: Directory containing video files.
@@ -243,9 +256,9 @@ def get_video_files(source_dir: str, recursive: bool = True) -> list[str]:
         ]
     else:
         video_files = [
-            os.path.join(source_dir, f)
-            for f in os.listdir(source_dir)
-            if os.path.isfile(os.path.join(source_dir, f)) and is_video_file(f)
+            os.path.join(source_dir, file)
+            for file in os.listdir(source_dir)
+            if is_video_file(file)
         ]
     return video_files
 
@@ -458,11 +471,10 @@ def safe_move(source_path: str, target_folder: str, file_name: str):
     shutil.move(source_path, dest_path)
 
 
-def process_video_task(file_path, target_dir):
+def process_video_task(file_path):
     """
        Process a single video file: check resolution, search for YouTube data, and perform appropriate actions.
        :param file_path: Path to the video file being processed.
-       :param target_dir: Directory where processed files will be stored.
     """
     video = Video(local_path=file_path,
                   name=os.path.splitext(os.path.basename(file_path))[0]
@@ -476,39 +488,53 @@ def process_video_task(file_path, target_dir):
                 video.status = VideoStatus.ERROR
                 return
 
-            channel_folder = os.path.join(target_dir, video.channel)
-            os.makedirs(channel_folder, exist_ok=True)
+            if Config.mode == 'inplace':
+                target_folder = os.path.dirname(video.local_path)
+                if handle_local_resolution(video):
+                    video.log.append(f"Local file is already 720p+, skipping download.")
+                    video.status = VideoStatus.SKIPPED
+                    return
 
-            if video_already_exists(video, channel_folder):
-                os.remove(video.local_path)
-                video.log.append(f"Old file deleted successfully.")
-                video.status = VideoStatus.SKIPPED
-                return
+            else:
+                target_folder = os.path.join(Config.target_directory, video.channel)
+                os.makedirs(target_folder, exist_ok=True)
 
-            if handle_local_resolution(video):
-                shutil.move(video.local_path, channel_folder)
-                video.status = VideoStatus.MOVED
-                return
+                if video_already_exists(video, target_folder):
+                    os.remove(video.local_path)
+                    video.log.append(f"Old file deleted successfully.")
+                    video.status = VideoStatus.SKIPPED
+                    return
+
+                if handle_local_resolution(video):
+                    shutil.move(video.local_path, target_folder)
+                    video.status = VideoStatus.MOVED
+                    return
 
             formats = extract_required_formats(video)
             video.log.append(f"Available formats: {', '.join(formats)}")
 
             if formats["136"] and formats["140"]:
                 video.log.append("Merging formats 136 and 140...")
-                merged_path = download_and_merge_video_audio(video, channel_folder)
+                merged_path = download_and_merge_video_audio(video, target_folder)
                 if merged_path:
-                    os.replace(video.local_path, merged_path)
-                    video.log.append(f"Old file (if exist) replaced successfully.")
-                    os.rename(merged_path, os.path.join(channel_folder, f"{video.name}.mp4"))
-                    video.log.append(f"Merged [Temp] file renamed successfully.")
+                    if Config.mode == 'inplace':
+                        os.replace(merged_path, video.local_path)
+                        video.log.append(f"File replaced in-place successfully.")
+                    else:
+                        os.rename(merged_path, os.path.join(target_folder, f"{video.name}.mp4"))
+                        video.log.append(f"Merged [Temp] file renamed successfully.")
                     video.status = VideoStatus.DOWNLOADED
                 else:
                     video.status = VideoStatus.ERROR
             else:
-                video.log.append("Neither format 22 nor formats 136 and 140 are available. Moving existing file.")
-                shutil.move(video.local_path, channel_folder)
-                video.log.append(f"File moved to target folder.")
-                video.status = VideoStatus.MOVED
+                video.log.append("Required formats are not available. Using existing file.")
+                if Config.mode == 'by-channel':
+                    shutil.move(video.local_path, target_folder)
+                    video.log.append("Existing file moved to channel folder.")
+                    video.status = VideoStatus.MOVED
+                else:
+                    video.log.append("Mode=inplace; leaving file as is.")
+                    video.status = VideoStatus.SKIPPED
 
         except Exception as e:
             video.log.append(f"Error processing video: {e}")
@@ -518,21 +544,18 @@ def process_video_task(file_path, target_dir):
             write_log_and_status(video)
 
 
-def process_videos(source_dir: str, target_dir: str, max_threads: int = 3):
+def process_videos():
     """
         Process all video files in the source directory, utilizing multithreading for efficiency.
-        :param source_dir: Directory containing video files to process.
-        :param target_dir: Directory where processed files will be stored.
-        :param max_threads: Maximum number of threads for concurrent processing.
     """
 
-    video_files = get_video_files(source_dir, Config.recursive)
+    video_files = get_video_files(Config.source_directory, Config.recursive)
 
     global_logger.info(f"Found {len(video_files)} videos for processing.")
 
-    with ThreadPoolExecutor(max_threads) as executor:
+    with ThreadPoolExecutor(Config.threads) as executor:
         futures = {
-            executor.submit(process_video_task, file_path, target_dir):
+            executor.submit(process_video_task, file_path):
                 file_path for file_path in video_files
         }
 
@@ -551,15 +574,21 @@ if __name__ == '__main__':
 
     params = parse_arguments()
 
-    source_directory = params.source_dir
-    target_directory = params.target_dir
-
+    Config.mode = params.mode
+    Config.source_directory = params.source_dir
     Config.recursive = params.recursive
     Config.threads = params.threads
     Config.retries = params.retries
 
-    initialize_excel(source_directory)
-    process_videos(source_directory, target_directory, max_threads=Config.threads)
+    if Config.mode == 'inplace':
+        Config.target_directory = Config.source_directory
+    else:
+        if not params.target_dir:
+            sys.exit("Error: --target_dir is required if --mode=by-channel.")
+        Config.target_directory = params.target_dir
 
+    initialize_excel()
+    process_videos()
     format_excel_sheet()
+
     global_logger.info(f"\nProcessing completed. \nReport saved at {Config.excel_path}")
