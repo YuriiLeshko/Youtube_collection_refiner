@@ -39,6 +39,24 @@ class Config:
     workbook = None
     sheet = None
 
+    @classmethod
+    def initialize(cls, args):
+        """
+        Initialize configuration parameters from command-line arguments.
+        """
+        cls.mode = args.mode
+        cls.source_directory = args.source_dir
+        cls.recursive = args.recursive
+        cls.threads = args.threads
+        cls.retries = args.retries
+
+        if cls.mode == 'inplace':
+            cls.target_directory = cls.source_directory
+        else:
+            if not args.target_dir:
+                sys.exit("Error: --target_dir is required if --mode=by-channel.")
+            cls.target_directory = args.target_dir
+
 
 class VideoStatus(Enum):
     UNPROCESSED = ("Unprocessed", "FFFFFF")  # White
@@ -575,19 +593,7 @@ if __name__ == '__main__':
     ensure_latest_package("ffmpeg")
 
     params = parse_arguments()
-
-    Config.mode = params.mode
-    Config.source_directory = params.source_dir
-    Config.recursive = params.recursive
-    Config.threads = params.threads
-    Config.retries = params.retries
-
-    if Config.mode == 'inplace':
-        Config.target_directory = Config.source_directory
-    else:
-        if not params.target_dir:
-            sys.exit("Error: --target_dir is required if --mode=by-channel.")
-        Config.target_directory = params.target_dir
+    Config.initialize(params)
 
     initialize_excel()
     process_videos()
