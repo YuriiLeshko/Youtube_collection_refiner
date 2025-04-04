@@ -79,8 +79,9 @@ class VideoStatus(Enum):
 
 @dataclass
 class Video:
-    local_path:  os.PathLike[str]
     name: str
+    old_path: os.PathLike[str]
+    new_path: Optional[str] = None
     status: VideoStatus = VideoStatus.UNPROCESSED
     yt_id: str = 'N/A'
     yt_url: str = 'N/A'
@@ -288,7 +289,7 @@ def get_video_duration(video: Video) -> Optional[int]:
         :return: Duration of the video in seconds, or None if the duration cannot be retrieved.
     """
     try:
-        with VideoFileClip(video.local_path) as clip:
+        with VideoFileClip(video.old_path) as clip:
             return int(clip.duration)
     except Exception as e:
         video.log.append(f"Unable to retrieve local video duration:{e}")
@@ -419,6 +420,20 @@ def download_and_merge_video_audio(video: Video, target_dir: str) -> Optional[st
     except Exception as e:
         video.log.append(f"Error in download and merge process: {e}")
         return None
+def set_file_modification_date(video: Video, upload_date: Optional[datetime.date] = None):
+    """
+        Sets the file's modification date to the specified upload date obtained from YouTube.
+        filepath (str): The path to the file whose modification date will be changed.
+        upload_date (Optional[datetime.date]): The new modification date to set for the file.
+    """
+    if upload_date:
+        try:
+            new_datetime = datetime.combine(upload_date, datetime.min.time())
+            timestamp = new_datetime.timestamp()
+            os.utime(video.new_path, (timestamp, timestamp))
+            video.log.append("The modification date is set successfully.")
+        except Exception as e:
+            video.log.append(f"The modification date is not set {e}.")
 
 
 def video_already_exists(video: Video, target_folder: str) -> bool:
@@ -442,11 +457,11 @@ def handle_local_resolution(video: Video) -> bool:
         :return: True if the resolution is 720p or higher, False otherwise.
     """
     try:
-        with VideoFileClip(video.local_path) as vfc:
+        with VideoFileClip(video.old_path) as vfc:
             local_resolution = vfc.size[1]  # Video height
         video.log.append(f"Local resolution is {local_resolution}.")
         if local_resolution and local_resolution >= 720:
-            video.log.append(f"Local resolution is >= 720p. Moving to target folder.")
+            video.log.append(f"Local resolution is >= 720p.")
             return True
         return False
     except Exception as e:
@@ -472,29 +487,12 @@ def extract_required_formats(video: Video) -> dict:
     return required_formats
 
 
-def safe_move(source_path: str, target_folder: str, file_name: str):
-    """
-        Safely move a file to the target directory, ensuring no overwrites.
-        :param source_path: Source file path.
-        :param target_folder: Target folder for the file.
-        :param file_name: Name of the file.
-    """
-    dest_path = os.path.join(target_folder, file_name)
-    counter = 1
-    while os.path.exists(dest_path):
-        base, ext = os.path.splitext(dest_path)
-        dest_path = f"{base}_[{counter}]{ext}"
-        counter += 1
-
-    shutil.move(source_path, dest_path)
-
-
 def process_video_task(file_path):
     """
        Process a single video file: check resolution, search for YouTube data, and perform appropriate actions.
        :param file_path: Path to the video file being processed.
     """
-    video = Video(local_path=file_path,
+    video = Video(old_path=file_path,
                   name=os.path.splitext(os.path.basename(file_path))[0]
                   )
 
@@ -507,7 +505,8 @@ def process_video_task(file_path):
                 return
 
             if Config.mode == 'inplace':
-                target_folder = os.path.dirname(video.local_path)
+                target_folder = os.path.dirname(video.old_path)
+                video.new_path = os.path.join(target_folder, f"{video.name}.mp4")
                 if handle_local_resolution(video):
                     video.log.append(f"Local file is already 720p+, skipping download.")
                     video.status = VideoStatus.SKIPPED
@@ -516,15 +515,17 @@ def process_video_task(file_path):
             else:
                 target_folder = os.path.join(Config.target_directory, video.channel)
                 os.makedirs(target_folder, exist_ok=True)
+                video.new_path = os.path.join(target_folder, f"{video.name}.mp4")
 
                 if video_already_exists(video, target_folder):
-                    os.remove(video.local_path)
+                    os.remove(video.old_path)
                     video.log.append(f"Old file deleted successfully.")
                     video.status = VideoStatus.SKIPPED
                     return
 
                 if handle_local_resolution(video):
-                    shutil.move(video.local_path, target_folder)
+                    shutil.move(video.old_path, target_folder)
+                    video.log.append(f"Local file is already 720p+, moving to chanel folder.")
                     video.status = VideoStatus.MOVED
                     return
 
@@ -536,12 +537,12 @@ def process_video_task(file_path):
                 merged_path = download_and_merge_video_audio(video, target_folder)
                 if merged_path:
                     if Config.mode == 'inplace':
-                        os.replace(merged_path, video.local_path)
+                        os.replace(merged_path, video.old_path)
                         video.log.append(f"File replaced 'in-place' successfully.")
                     else:
-                        os.rename(merged_path, os.path.join(target_folder, f"{video.name}.mp4"))
+                        os.rename(merged_path, video.new_path)
                         video.log.append(f"Merged [Temp] file renamed successfully.")
-                        os.remove(video.local_path)
+                        os.remove(video.old_path)
                         video.log.append(f"Old file deleted successfully.")
                     video.status = VideoStatus.DOWNLOADED
                 else:
@@ -549,7 +550,7 @@ def process_video_task(file_path):
             else:
                 video.log.append("Required formats are not available. Using existing file.")
                 if Config.mode == 'by-channel':
-                    shutil.move(video.local_path, target_folder)
+                    shutil.move(video.old_path, target_folder)
                     video.log.append("Existing file moved to channel folder.")
                     video.status = VideoStatus.MOVED
                 else:
@@ -561,6 +562,8 @@ def process_video_task(file_path):
             video.status = VideoStatus.ERROR
 
         finally:
+            if video.status != VideoStatus.ERROR:
+                set_file_modification_date(video, video.upload_date)
             write_log_and_status(video)
 
 
