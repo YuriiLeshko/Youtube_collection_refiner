@@ -21,6 +21,79 @@ from moviepy.video.io.VideoFileClip import VideoFileClip
 
 VIDEO_EXTENSIONS = [".mp4", ".mkv", ".avi", ".mov", ".flv"]
 EXCEL_HEADERS = ["Video Name", "Channel", "Link", "Status", "Log"]
+HEIGHT = [4320, 2160, 1440, 1080, 720, 480, 360, 240, 144]
+V_CODEC = ['av1', 'h264', 'vp9.2', 'vp9']
+FPS = [60, 30]
+
+VIDEO_FORMATS = {
+    '694': {'height': 144,  'fps': 60, 'v_codec': 'av1', 'container': 'mp4'},
+    '695': {'height': 240,  'fps': 60, 'v_codec': 'av1', 'container': 'mp4'},
+    '696': {'height': 360,  'fps': 60, 'v_codec': 'av1', 'container': 'mp4'},
+    '697': {'height': 480,  'fps': 60, 'v_codec': 'av1', 'container': 'mp4'},
+    '698': {'height': 720,  'fps': 60, 'v_codec': 'av1', 'container': 'mp4'},
+    '699': {'height': 1080, 'fps': 60, 'v_codec': 'av1', 'container': 'mp4'},
+    '700': {'height': 1440, 'fps': 60, 'v_codec': 'av1', 'container': 'mp4'},
+    '701': {'height': 2160, 'fps': 60, 'v_codec': 'av1', 'container': 'mp4'},
+    '702': {'height': 4320, 'fps': 60, 'v_codec': 'av1', 'container': 'mp4'},
+
+    '398': {'height': 720,  'fps': 60, 'v_codec': 'av1', 'container': 'mp4'},
+    '399': {'height': 1080, 'fps': 60, 'v_codec': 'av1', 'container': 'mp4'},
+    '400': {'height': 1440, 'fps': 60, 'v_codec': 'av1', 'container': 'mp4'},
+    '401': {'height': 2160, 'fps': 60, 'v_codec': 'av1', 'container': 'mp4'},
+    '402': {'height': 4320, 'fps': 60, 'v_codec': 'av1', 'container': 'mp4'},
+
+    '330': {'height': 144,  'fps': 30, 'v_codec': 'vp9.2', 'container': 'webm'},
+    '331': {'height': 240,  'fps': 30, 'v_codec': 'vp9.2', 'container': 'webm'},
+    '332': {'height': 360,  'fps': 30, 'v_codec': 'vp9.2', 'container': 'webm'},
+    '333': {'height': 480,  'fps': 30, 'v_codec': 'vp9.2', 'container': 'webm'},
+    '334': {'height': 720,  'fps': 30, 'v_codec': 'vp9.2', 'container': 'webm'},
+    '335': {'height': 1080, 'fps': 30, 'v_codec': 'vp9.2', 'container': 'webm'},
+    '336': {'height': 1440, 'fps': 30, 'v_codec': 'vp9.2', 'container': 'webm'},
+    '337': {'height': 2160, 'fps': 30, 'v_codec': 'vp9.2', 'container': 'webm'},
+
+    '299': {'height': 1080, 'fps': 60, 'v_codec': 'h264', 'container': 'mp4'},
+    '298': {'height': 720,  'fps': 60, 'v_codec': 'h264', 'container': 'mp4'},
+    '137': {'height': 1080, 'fps': 30, 'v_codec': 'h264', 'container': 'mp4'},
+    '136': {'height': 720,  'fps': 30, 'v_codec': 'h264', 'container': 'mp4'},
+    '135': {'height': 480,  'fps': 30, 'v_codec': 'h264', 'container': 'mp4'},
+    '134': {'height': 360,  'fps': 30, 'v_codec': 'h264', 'container': 'mp4'},
+    '133': {'height': 240,  'fps': 30, 'v_codec': 'h264', 'container': 'mp4'},
+    '160': {'height': 144,  'fps': 30, 'v_codec': 'h264', 'container': 'mp4'},
+
+    '247': {'height': 720,  'fps': 30, 'v_codec': 'vp9', 'container': 'webm'},
+    '244': {'height': 480,  'fps': 30, 'v_codec': 'vp9', 'container': 'webm'},
+    '243': {'height': 360,  'fps': 30, 'v_codec': 'vp9', 'container': 'webm'},
+    '242': {'height': 240,  'fps': 30, 'v_codec': 'vp9', 'container': 'webm'},
+    '278': {'height': 144,  'fps': 30, 'v_codec': 'vp9', 'container': 'webm'},
+    '303': {'height': 1080, 'fps': 60, 'v_codec': 'vp9', 'container': 'webm'},
+    '302': {'height': 720,  'fps': 60, 'v_codec': 'vp9', 'container': 'webm'},
+    '308': {'height': 1440, 'fps': 60, 'v_codec': 'vp9', 'container': 'webm'},
+    '315': {'height': 2160, 'fps': 60, 'v_codec': 'vp9', 'container': 'webm'},
+    '272': {'height': 4320, 'fps': 60, 'v_codec': 'vp9', 'container': 'webm'},
+}
+
+AUDIO_FORMATS = {
+    '139': {'abr': 48,  'a_codec': 'aac',   'container': 'mp4'},
+    '140': {'abr': 128, 'a_codec': 'aac',   'container': 'mp4'},
+    '141': {'abr': 256, 'a_codec': 'aac',   'container': 'mp4'},
+
+    '249': {'abr': 50,  'a_codec': 'opus',  'container': 'webm'},
+    '250': {'abr': 70,  'a_codec': 'opus',  'container': 'webm'},
+    '251': {'abr': 128, 'a_codec': 'opus',  'container': 'webm'},
+
+    '256': {'abr': 192, 'a_codec': 'aac',   'container': 'mp4'},
+    '258': {'abr': 384, 'a_codec': 'aac',   'container': 'mp4'},
+    '325': {'abr': 384, 'a_codec': 'dts',   'container': 'mp4'},
+    '327': {'abr': 256, 'a_codec': 'aac',   'container': 'mp4'},
+    '328': {'abr': 384, 'a_codec': 'eac3',  'container': 'mp4'},
+
+    '338': {'abr': 480, 'a_codec': 'opus',  'container': 'webm'},
+    '380': {'abr': 384, 'a_codec': 'ac3',   'container': 'mp4'},
+    '599': {'abr': 30,  'a_codec': 'aac',   'container': 'mp4'},
+    '600': {'abr': 35,  'a_codec': 'opus',  'container': 'webm'},
+    '773': {'abr': 900, 'a_codec': 'iamf',  'container': 'mp4'},
+    '774': {'abr': 256, 'a_codec': 'opus',  'container': 'webm'},
+}
 
 
 class Config:
@@ -31,9 +104,18 @@ class Config:
     source_directory: Optional[os.PathLike[str]] = None
     target_directory: Optional[os.PathLike[str]] = None
 
+    video_quality: int = 720
+    video_fps: int = 30
+    video_codec: str = "h264"
+    audio_quality: int = 128
+    no_match: str = "closest"
+
     recursive: bool = True
     threads: int = 3
     retries: int = 3
+
+    video_format_priority: list = ["136"]
+    audio_format_priority: list = ["140"]
 
     excel_path = None
     workbook = None
@@ -46,6 +128,11 @@ class Config:
         """
         cls.mode = args.mode
         cls.source_directory = args.source_dir
+        cls.video_quality = args.video_quality
+        cls.video_fps = args.video_fps
+        cls.video_codec = args.video_codec
+        cls.audio_quality = args.audio_quality
+        cls.no_match = args.no_match
         cls.recursive = args.recursive
         cls.threads = args.threads
         cls.retries = args.retries
@@ -89,7 +176,7 @@ class Video:
     duration: Optional[int] = None  # sec
     upload_date: Optional[date] = None
     log: List[str] = field(default_factory=list)
-    formats: List[dict] = field(default_factory=list)
+    format_ids: List[str] = field(default_factory=list)
 
 
 global_logger = logging.getLogger("global_logger")
@@ -146,6 +233,44 @@ def parse_arguments():
         help="Source directory containing videos to process (default: current working directory)."
     )
     parser.add_argument(
+        '--video-quality',
+        type=int,
+        choices=HEIGHT,
+        default=720,
+        help="Required video quality (Default: 720)"
+    )
+    parser.add_argument(
+        '--video-fps',
+        type=int,
+        choices=FPS,
+        default=30,
+        help="Required FPS (Default: 30)"
+    )
+    parser.add_argument(
+        '--video-codec',
+        type=str,
+        choices=V_CODEC,
+        default='h264',
+        help="Required Video Codec (Default: 'h264')"
+    )
+    parser.add_argument(
+        '--audio-quality',
+        type=int,
+        default=128,
+        help="Preferred audio quality in Kbps (default: 128 )."
+    )
+    parser.add_argument(
+        '--no_match',
+        type=str,
+        choices=['closest', 'skip', 'first_better', 'first_lower'],
+        default='closest',
+        help="Fallback behavior if no exact format is found:\n"
+            " - closest: alternate closest higher/lower qualities\n"
+            " - skip: use only the exact requested quality\n"
+            " - first_better: prefer only higher qualities, ascending\n"
+            " - first_lower: prefer only lower qualities, descending"
+    )
+    parser.add_argument(
         '--recursive',
         action='store_true',
         help="Enable recursive search in the source directory."
@@ -177,6 +302,73 @@ def ensure_latest_package(package_name):
     except subprocess.CalledProcessError as e:
         global_logger.warning(f"Failed to update {package_name}: {e}")
         sys.exit(1)
+
+
+def build_video_format_priority_list():
+    """
+    Build a prioritized list of video format_ids based on quality, codec and fps,
+    considering fallback behavior (Config.no_match).
+    """
+    target_height = Config.video_quality
+    target_fps = Config.video_fps
+    target_codec = Config.video_codec.lower()
+    no_match = Config.no_match
+
+    # Adjust quality list based on --no_match
+    if no_match == 'skip':
+        qualities = [target_height]
+    elif no_match == 'first_better':
+        qualities = [target_height] + [h for h in sorted(HEIGHT) if h > target_height]
+    elif no_match == 'first_lower':
+        qualities = [target_height] + [h for h in sorted(HEIGHT, reverse=True) if h < target_height]
+    elif no_match == 'closest':
+        higher = sorted([h for h in HEIGHT if h > target_height])
+        lower = sorted([h for h in HEIGHT if h < target_height], reverse=True)
+        qualities = [target_height]
+        i = 0
+        while i < max(len(higher), len(lower)):
+            if i < len(higher):
+                qualities.append(higher[i])
+            if i < len(lower):
+                qualities.append(lower[i])
+            i += 1
+
+    # Move user preference to front
+    codecs = [target_codec] + [c.lower() for c in V_CODEC if c.lower() != target_codec]
+    fps_list = [target_fps] + [f for f in FPS if f != target_fps]
+
+    def index_or_max(value, lst):
+        return lst.index(value) if value in lst else len(lst)
+
+    def score(fmt: dict):
+        q_score = index_or_max(fmt['height'], qualities)
+        c_score = index_or_max(fmt['v_codec'].lower(), codecs)
+        f_score = index_or_max(fmt['fps'], fps_list)
+        return q_score * 100 + c_score * 10 + f_score
+
+    sorted_formats = sorted(
+        VIDEO_FORMATS.items(),
+        key=lambda item: score(item[1])
+    )
+
+    # Save to config
+    Config.video_format_priority = [fid for fid, _ in sorted_formats]
+
+
+def build_audio_format_priority_list():
+    """
+    Build a list of audio format IDs sorted by the absolute difference between
+    the format's abr and the desired value (lowest difference first).
+    """
+    target_abr = Config.audio_quality
+
+    sorted_audio = sorted(
+        AUDIO_FORMATS.items(),
+        key=lambda item: abs(item[1]['abr'] - target_abr)
+    )
+
+    # Save to config
+    Config.audio_format_priority = [fid for fid, _ in sorted_audio]
 
 
 def initialize_excel():
@@ -336,9 +528,25 @@ def search_youtube_video(video: Video) -> bool:
         upload_date = matched_result.get('upload_date', None)
         if upload_date:
             video.upload_date = datetime.strptime(upload_date, '%Y%m%d').date()
-        video.formats = matched_result.get('formats', [])
+        video.format_ids = [f.get('format_id') for f in matched_result.get('formats', []) if 'format_id' in f]
         video.log.append(f"Selected video from channel '{video.channel}'")
         return True
+
+
+def describe_format(format_id: str) -> str:
+    """
+       Return a human-readable description of a given YouTube format ID.
+        :param format_id: The YouTube format ID to describe.
+        :return: A string describing the format, such as '720p, 30 FPS' or '128 kbps'.
+                Returns 'unknown format' if the ID is not recognized.
+    """
+    if format_id in VIDEO_FORMATS:
+        f = VIDEO_FORMATS[format_id]
+        return f"video {f.get('height', '?')}p, {f.get('fps', '?')} FPS"
+    elif format_id in AUDIO_FORMATS:
+        f = AUDIO_FORMATS[format_id]
+        return f"audio {f.get('abr', '?')} kbps"
+    return "unknown format"
 
 
 @retry
@@ -351,7 +559,7 @@ def download_youtube_format(video: Video, output_dir: str, format_id: str) -> Op
         :return: Path to the downloaded file if successful, None otherwise.
     """
     try:
-        video.log.append(f"Downloading format {format_id}...")
+        video.log.append(f"Downloading format {format_id} ({describe_format(format_id)}) ...")
         ydl_opts = {
             'format': format_id,
             'outtmpl': os.path.join(output_dir, '%(title)s.%(ext)s'),
@@ -381,7 +589,7 @@ def merge_video_audio(video: Video, video_path: str, audio_path: str, merged_pat
         video.log.append("Starting merge of video and audio...")
         command = [
             "ffmpeg", "-i", video_path, "-i", audio_path,
-            "-c:v", "copy", "-c:a", "aac", merged_path,
+            "-c:v", "libx264", "-c:a", "aac", merged_path,
         ]
         result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -396,17 +604,19 @@ def merge_video_audio(video: Video, video_path: str, audio_path: str, merged_pat
         return None
 
 
-def download_and_merge_video_audio(video: Video, target_dir: str) -> Optional[str]:
+def download_and_merge_video_audio(video: Video, target_dir: str, v_fmt: str, a_fmt: str) -> Optional[str]:
     """
         Download and merge video and audio from a YouTube video into a single file.
         :param video: Video object with details about the video to download.
         :param target_dir: Path to the folder where the video should be saved.
+        :param v_fmt: video format id.
+        :param a_fmt: audio format id.
         :return: Path to the merged video file with 'tmp' extension, or None if the process fails.
     """
     try:
         with tempfile.TemporaryDirectory() as temp_dir:
-            temp_video_path = download_youtube_format(video, temp_dir, '136')
-            temp_audio_path = download_youtube_format(video, temp_dir, '140')
+            temp_video_path = download_youtube_format(video, temp_dir, v_fmt)
+            temp_audio_path = download_youtube_format(video, temp_dir, a_fmt)
             merged_path = os.path.join(target_dir, f"[TEMP]{video.name}.mp4")
 
             merged_result = merge_video_audio(video, temp_video_path, temp_audio_path, merged_path)
@@ -420,6 +630,8 @@ def download_and_merge_video_audio(video: Video, target_dir: str) -> Optional[st
     except Exception as e:
         video.log.append(f"Error in download and merge process: {e}")
         return None
+
+
 def set_file_modification_date(video: Video, upload_date: Optional[datetime.date] = None):
     """
         Sets the file's modification date to the specified upload date obtained from YouTube.
@@ -450,41 +662,29 @@ def video_already_exists(video: Video, target_folder: str) -> bool:
 
 
 @retry
-def handle_local_resolution(video: Video) -> bool:
+def is_local_video_matching_config(video: Video) -> bool:
     """
-        Check the resolution of a local video file.
-        :param video: Video object with details about the video to download.
-        :return: True if the resolution is 720p or higher, False otherwise.
+    Returns True if the local video matches the configured quality (height)
+    and FPS is within ±5 of the required FPS (if defined).
     """
     try:
-        with VideoFileClip(video.old_path) as vfc:
-            local_resolution = vfc.size[1]  # Video height
-        video.log.append(f"Local resolution is {local_resolution}.")
-        if local_resolution and local_resolution >= 720:
-            video.log.append(f"Local resolution is >= 720p.")
+        with VideoFileClip(video.old_path) as clip:
+            local_height = clip.size[1]  # Video height
+            local_fps = round(clip.fps)
+
+        video.log.append(f"Local resolution is {local_height}p/{local_fps}fps.")
+
+        if local_height != Config.video_quality or abs(local_fps - Config.video_fps) > 5:
+            video.log.append(f"Local resolution does not match required.")
+            return False
+
+        else:
+            video.log.append(f"Local resolution match required.")
             return True
-        return False
+
     except Exception as e:
-        video.log.append(f"Error processing video resolution: {e}")
+        video.log.append(f"Failed to check local video quality: {e}")
         return False
-
-
-def extract_required_formats(video: Video) -> dict:
-    """
-        Extract required formats (22, 136, 140) from the list of available formats.
-        :param video: Video object with details about the video to download.
-        :return: Dictionary with required format IDs as keys and format info as values.
-    """
-    required_formats = {
-        "22": None,    # Video + Audio, 720p
-        "136": None,   # Video only, 720p
-        "140": None    # Audio only
-    }
-    for fmt in video.formats:
-        if fmt['format_id'] in required_formats:
-            required_formats[fmt['format_id']] = fmt
-
-    return required_formats
 
 
 def process_video_task(file_path):
@@ -495,8 +695,7 @@ def process_video_task(file_path):
     video = Video(old_path=file_path,
                   name=os.path.splitext(os.path.basename(file_path))[0]
                   )
-
-    global_logger.info(f"Processing video: {video.name}")
+    video.log.append(f"Started processing video '{video.name}'")
 
     with open(os.devnull, 'w') as o_null, redirect_stdout(o_null), redirect_stderr(o_null):
         try:
@@ -504,50 +703,45 @@ def process_video_task(file_path):
                 video.status = VideoStatus.ERROR
                 return
 
+            if Config.no_match == 'skip' and Config.video_format_priority[0] not in video.format_ids:
+                video.log.append(
+                    f"Exact required video format '{Config.video_format_priority[0]}' not found. "
+                    f"No fallback allowed (no_match='skip'). Skipping download."
+                )
+                video.status = VideoStatus.SKIPPED
+                return
+
+            # Setup output paths
             if Config.mode == 'inplace':
                 target_folder = os.path.dirname(video.old_path)
-                video.new_path = os.path.join(target_folder, f"{video.name}.mp4")
-                if handle_local_resolution(video):
-                    video.log.append(f"Local file is already 720p+, skipping download.")
-                    video.status = VideoStatus.SKIPPED
-                    return
-
             else:
                 target_folder = os.path.join(Config.target_directory, video.channel)
                 os.makedirs(target_folder, exist_ok=True)
-                video.new_path = os.path.join(target_folder, f"{video.name}.mp4")
+            video.new_path = os.path.join(target_folder, f"{video.name}.mp4")
 
-                if video_already_exists(video, target_folder):
-                    os.remove(video.old_path)
-                    video.log.append(f"Old file deleted successfully.")
-                    video.status = VideoStatus.SKIPPED
-                    return
+            # Skip if file already exists in target
+            if Config.mode == 'by-channel' and video_already_exists(video, target_folder):
+                os.remove(video.old_path)
+                video.log.append("Old file deleted successfully.")
+                video.status = VideoStatus.SKIPPED
+                return
 
-                if handle_local_resolution(video):
+            # Skip/move if local video is good enough
+            if is_local_video_matching_config(video):
+                if Config.mode == 'by-channel':
                     shutil.move(video.old_path, target_folder)
-                    video.log.append(f"Local file is already 720p+, moving to chanel folder.")
+                    video.log.append("Local file matches required quality. Moved to channel folder.")
                     video.status = VideoStatus.MOVED
-                    return
-
-            formats = extract_required_formats(video)
-            video.log.append(f"Available formats: {', '.join(formats)}")
-
-            if formats["136"] and formats["140"]:
-                video.log.append("Merging formats 136 and 140...")
-                merged_path = download_and_merge_video_audio(video, target_folder)
-                if merged_path:
-                    if Config.mode == 'inplace':
-                        os.replace(merged_path, video.old_path)
-                        video.log.append(f"File replaced 'in-place' successfully.")
-                    else:
-                        os.rename(merged_path, video.new_path)
-                        video.log.append(f"Merged [Temp] file renamed successfully.")
-                        os.remove(video.old_path)
-                        video.log.append(f"Old file deleted successfully.")
-                    video.status = VideoStatus.DOWNLOADED
                 else:
-                    video.status = VideoStatus.ERROR
-            else:
+                    video.log.append("Local file matches required quality. Skipping download.")
+                    video.status = VideoStatus.SKIPPED
+                return
+
+            # Select best available formats
+            video_fmt_id = next((fid for fid in Config.video_format_priority if fid in video.format_ids), None)
+            audio_fmt_id = next((fid for fid in Config.audio_format_priority if fid in video.format_ids), None)
+
+            if not video_fmt_id or not audio_fmt_id:
                 video.log.append("Required formats are not available. Using existing file.")
                 if Config.mode == 'by-channel':
                     shutil.move(video.old_path, target_folder)
@@ -556,6 +750,25 @@ def process_video_task(file_path):
                 else:
                     video.log.append("Mode=inplace; leaving file as is.")
                     video.status = VideoStatus.SKIPPED
+                return
+
+            # Download + merge
+            video.log.append("Downloading and merging video-format and audio-format ...")
+            merged_path = download_and_merge_video_audio(video, target_folder, video_fmt_id, audio_fmt_id)
+
+            if merged_path:
+                if Config.mode == 'inplace':
+                    os.replace(merged_path, video.old_path)
+                    video.log.append("File replaced 'in-place' successfully.")
+                else:
+                    os.rename(merged_path, video.new_path)
+                    video.log.append("Merged [Temp] file renamed successfully.")
+                    os.remove(video.old_path)
+                    video.log.append("Old file deleted successfully.")
+                video.status = VideoStatus.DOWNLOADED
+            else:
+                video.log.append("Download or merge failed. Video not processed.")
+                video.status = VideoStatus.ERROR
 
         except Exception as e:
             video.log.append(f"Error processing video: {e}")
@@ -564,6 +777,7 @@ def process_video_task(file_path):
         finally:
             if video.status != VideoStatus.ERROR:
                 set_file_modification_date(video, video.upload_date)
+            video.log.append("Processing completed.")
             write_log_and_status(video)
 
 
@@ -577,18 +791,21 @@ def process_videos():
     global_logger.info(f"Found {len(video_files)} videos for processing.")
 
     with ThreadPoolExecutor(Config.threads) as executor:
-        futures = {
-            executor.submit(process_video_task, file_path):
-                file_path for file_path in video_files
-        }
+        futures = {}
+        for file_path in video_files:
+            video_name = os.path.splitext(os.path.basename(file_path))[0]
+            global_logger.info(f"Processing video: {video_name}")
+            futures[executor.submit(process_video_task, file_path)] = file_path
+
 
         for future in as_completed(futures):
             video_path = futures[future]
+            video_name = os.path.splitext(os.path.basename(video_path))[0]
             try:
                 future.result()
-                global_logger.info(f"Processing completed for: {video_path}")
+                global_logger.info(f"Processing completed for: {video_name}")
             except Exception as e:
-                global_logger.warning(f"Error processing {video_path}: {e}")
+                global_logger.warning(f"Error processing {video_name}: {e}")
 
 
 if __name__ == '__main__':
@@ -597,6 +814,8 @@ if __name__ == '__main__':
 
     params = parse_arguments()
     Config.initialize(params)
+    build_video_format_priority_list()
+    build_audio_format_priority_list()
 
     initialize_excel()
     process_videos()
